@@ -1,0 +1,21 @@
+{
+  "title": "龙隐山河",
+  "description": "龙隐山河是一款文字冒险游戏。明朝建文年间，你是边境县城的年轻游侠，为寻找失踪师父踏上旅途，逐步揭开龙隐秘藏的真相。",
+  "keywords": ["文字游戏", "冒险游戏", "RPG", "龙隐山河", "明朝", "武侠", "探索", "剧情"],
+  "alternates": {
+    "canonical": "https://echoes-of-the-abyss.happyseeds.ai"
+  },
+  "openGraph": {
+    "title": "龙隐山河",
+    "description": "龙隐山河是一款文字冒险游戏。明朝建文年间，你是边境县城的年轻游侠，为寻找失踪师父踏上旅途，逐步揭开龙隐秘藏的真相。",
+    "url": "https://echoes-of-the-abyss.happyseeds.ai",
+    "siteName": "龙隐山河",
+    "locale": "zh_CN",
+    "type": "website"
+  },
+  "twitter": {
+    "card": "summary",
+    "title": "龙隐山河",
+    "description": "龙隐山河是一款文字冒险游戏。明朝建文年间，你是边境县城的年轻游侠，为寻找失踪师父踏上旅途，逐步揭开龙隐秘藏的真相。"
+  }
+}
