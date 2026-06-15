@@ -16,7 +16,7 @@ _龙隐山河_
                         |___/ 
 </pre>
 
-![powered by happyseeds](https://img.shields.io/badge/powered%20by-happyseeds-8b5cf6)
+[![powered by happyseeds](https://img.shields.io/badge/powered%20by-happyseeds-18cbef)](https://happyseeds.ai/)
 
 
 </div>
