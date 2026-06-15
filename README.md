@@ -7,14 +7,14 @@ _龙隐山河_
 
 </h1>
 
-```text
+<pre>
  _                          
 | |    ___   ___  _ __   __ _ 
 | |   / _ \ / _ \| '_ \ / _` |
 | |__| (_) | (_) | | | | (_| |
 |_____\___/ \___/|_| |_|\__, |
                         |___/ 
-```
+</pre>
 
 ![powered by happyseeds](https://img.shields.io/badge/powered%20by-happyseeds-8b5cf6)
 
