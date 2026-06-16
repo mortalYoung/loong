@@ -37,6 +37,22 @@ export const BASE_SKILLS: BaseSkillDef[] = [
   { id: 'insight', name: '基础战悟', description: '战场感悟根基，影响暴击和判断。', growthDesc: '暴击、闪避、战斗胜利' },
 ];
 
+export const BASE_SKILL_NAMES: Record<BaseSkillId, string> = {
+  sword: '基础剑法',
+  agility: '基础身法',
+  body: '基础体魄',
+  mind: '基础心法',
+  insight: '基础战悟',
+};
+
+export const BONUS_STAT_NAMES: Record<string, string> = {
+  strength: '力量',
+  agility: '敏捷',
+  physique: '体魄',
+  willpower: '意志',
+  perception: '洞察',
+};
+
 export function getTierName(tier: SkillTier): string {
   return TIER_NAMES[tier] ?? '入门';
 }
@@ -98,6 +114,16 @@ export const TIER_BONUSES: Record<BaseSkillId, TierBonus[]> = {
     { stat: 'perception', value: 6 },
   ],
 };
+
+export function getCumulativeTierBonus(skillId: BaseSkillId, tier: number): TierBonus | null {
+  const bonuses = TIER_BONUSES[skillId];
+  if (!bonuses?.length || tier <= 0) return null;
+  const applied = bonuses.slice(0, Math.min(tier, bonuses.length));
+  return {
+    stat: applied[0].stat,
+    value: applied.reduce((sum, bonus) => sum + bonus.value, 0),
+  };
+}
 
 // ── 战斗中技能成长规则 ──
 // 每场战斗胜利后统一调用，根据战斗数据分配熟练度

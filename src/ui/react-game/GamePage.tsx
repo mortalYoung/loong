@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useGameStore } from '@/store/useGameStore';
+import { BASE_SKILL_NAMES, BONUS_STAT_NAMES, getCumulativeTierBonus } from '@/game/data/skillData';
 
 // ── 古代日期生成 ──
 const MONTHS = ['正月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '冬月', '腊月'];
@@ -27,6 +28,51 @@ function getDateString(day: number, stamina: number): string {
   const shichen = getShichenByStamina(stamina);
   const weather = WEATHER[(day * 7 + 2) % WEATHER.length];
   return `建文元年·${month}${dayStr}·${shichen}　天气·${weather}`;
+}
+
+function getExhaustedNarrative(chapterId: string, chapterName: string): string {
+  if (chapterId === 'qingshi') {
+    return '青石镇的街巷已渐渐安静下来。你跑遍了客栈、衙门与镇东旧宅，脚底都带了尘土。再硬撑着打探，只会让旁人看出疲态，也难从细枝末节里分辨真伪。今夜该先歇下了。';
+  }
+  if (chapterId === 'guifeng') {
+    return '鬼风岭的寒风一阵紧过一阵，破驿的木梁也在夜色里发出低低的呻吟。你已在废墟间搜寻许久，手脚发僵，心弦紧绷。若再冒然深入，怕是连暗门前的机关声都未必听得清。';
+  }
+  if (chapterId === 'yunyin') {
+    return '云隐寺钟声已歇，山间雾气却更重了。你在塔林、藏经阁与石阶间来回奔走，呼吸也乱了几分。此时再去推演机关步法，只怕一步踏错，前功尽弃。';
+  }
+  if (chapterId === 'heishi') {
+    return '黑石矿洞里闷热与阴寒交替袭来，火把的烟气熏得你眼眶发涩。你在岔道与营地外围周旋已久，肩背酸沉。再往深处摸去，脚步稍乱便可能惊动三方势力。';
+  }
+  if (chapterId === 'longyin') {
+    return '龙隐地宫中的机关低鸣始终未歇，墙上的龙纹也在幽暗里忽明忽暗。你一路推门破阵，精神绷得太紧。此刻若继续前行，怕是连石砖纹路里的差别都要看漏。';
+  }
+  return `你在${chapterName}奔走了整整一日，筋骨酸沉，心神也有些散了。此刻再强撑着上路，只会错过细节，甚至把自己送进险境。你需要先歇一歇。`;
+}
+
+function getBaseStatBonusMap(player: any) {
+  return {
+    strength: getCumulativeTierBonus('sword', player.skills.sword.tier),
+    agility: getCumulativeTierBonus('agility', player.skills.agility.tier),
+    physique: getCumulativeTierBonus('body', player.skills.body.tier),
+    willpower: getCumulativeTierBonus('mind', player.skills.mind.tier),
+    perception: getCumulativeTierBonus('insight', player.skills.insight.tier),
+  };
+}
+
+function getEffectiveStatLines(player: any) {
+  const entries: Array<{ skillId: 'sword' | 'body' | 'agility' | 'mind' | 'insight'; label: string; value: number; suffix?: string }> = [
+    { skillId: 'sword', label: '攻击', value: player.base.strength * 2 },
+    { skillId: 'body', label: '防御', value: player.base.physique },
+    { skillId: 'agility', label: '闪避', value: player.base.agility * 2 },
+    { skillId: 'mind', label: '内力上限', value: player.base.willpower * 8 },
+    { skillId: 'insight', label: '暴击', value: Math.floor(player.base.perception / 2), suffix: '%' },
+  ];
+
+  return entries.map((entry) => {
+    const bonus = getCumulativeTierBonus(entry.skillId, player.skills[entry.skillId].tier);
+    const suffix = entry.suffix ?? '';
+    return { ...entry, bonus, suffix };
+  });
 }
 
 // ── 动态叙事：根据已完成事件和已收集线索生成当前描述 ──
@@ -257,7 +303,9 @@ function StoryPanel() {
     }
     const explo = world.explorationMap[world.currentChapter!] ?? 0;
     const isCompleted = explo >= 100;
-    const narrative = getChapterNarrative(world.currentChapter!, world.completedEventIds, world.inventory.map((i) => i.id));
+    const narrative = player.stamina > 0
+      ? getChapterNarrative(world.currentChapter!, world.completedEventIds, world.inventory.map((i) => i.id))
+      : getExhaustedNarrative(world.currentChapter!, chapter.name);
     return (
       <div className="leading-9">
         <p className="text-lg">
@@ -276,15 +324,15 @@ function StoryPanel() {
             <>
               {player.gold >= 10 ? (
                 <div className="game-menu-item text-lg" onClick={() => useGameStore.getState().restAtInn()}>
-                  ◇ 住店休息 <span className="text-sm" style={{ color: 'var(--muted)' }}>(-10 金，恢复全部气血与行动力)</span>
+                  ◇ 投宿歇脚 <span className="text-sm" style={{ color: 'var(--muted)' }}>(-10 金，恢复全部气血与行动力)</span>
                 </div>
               ) : (
                 <div className="text-lg" style={{ color: '#555', cursor: 'not-allowed' }}>
-                  ◇ 住店休息 <span className="text-sm">(金币不足)</span>
+                  ◇ 投宿歇脚 <span className="text-sm">(银钱不足)</span>
                 </div>
               )}
               <div className="game-menu-item text-lg" onClick={() => useGameStore.getState().restOnStreet()}>
-                ◇ 露宿街头 <span className="text-sm" style={{ color: 'var(--muted)' }}>(免费，恢复 50% 气血与 70% 行动力)</span>
+                ◇ 寻处将息 <span className="text-sm" style={{ color: 'var(--muted)' }}>(免费，恢复 50% 气血与 70% 行动力)</span>
               </div>
             </>
           )}
@@ -319,10 +367,28 @@ function StoryPanel() {
               return sk && sk.tier >= 1;
             });
             const showRate = dynRate < 100;
+            const hpLocked = opt.minHp !== undefined && player.hp < opt.minHp;
+            const goldLocked = opt.minGold !== undefined && player.gold < opt.minGold;
+            const isLocked = hpLocked || goldLocked;
             return (
-              <div key={opt.id} className="game-menu-item text-lg" onClick={() => resolveEvent(i)}>
+              <div
+                key={opt.id}
+                className="game-menu-item text-lg"
+                style={isLocked ? { opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none' } : undefined}
+                onClick={isLocked ? undefined : () => resolveEvent(i)}
+              >
                 {opt.text}
-                {showRate && (
+                {hpLocked && (
+                  <span className="ml-2 text-sm" style={{ color: 'var(--muted)' }}>
+                    （气力不足）
+                  </span>
+                )}
+                {goldLocked && (
+                  <span className="ml-2 text-sm" style={{ color: 'var(--muted)' }}>
+                    （金币不足）
+                  </span>
+                )}
+                {!isLocked && showRate && (
                   <span className="ml-2 text-sm" style={{ color: 'var(--muted)' }}>
                     ({dynRate}%{hasBonus ? '+' : ''})
                   </span>
@@ -379,6 +445,7 @@ function CharacterInfo({ player }: { player: any }) {
   const { getDerived } = require('@/store/useGameStore');
   const derived = getDerived(player);
   const hpPct = Math.max(0, Math.min(10, Math.round((player.hp / derived.maxHp) * 10)));
+  const effectiveLines = getEffectiveStatLines(player);
   return (
     <div>
       <div className="mb-2" style={{ color: 'var(--accent)' }}>角色</div>
@@ -391,6 +458,16 @@ function CharacterInfo({ player }: { player: any }) {
         <span>洞察 {player.base.perception}</span>
         <span>意志 {player.base.willpower}</span>
       </div>
+      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]" style={{ color: 'var(--muted)' }}>
+        {effectiveLines.map((line) => (
+          <span key={line.skillId}>
+            {line.label} {line.value}{line.suffix}
+            {line.bonus && line.bonus.value > 0 && (
+              <span style={{ color: 'var(--accent)' }}> +{line.bonus.value}{line.suffix}</span>
+            )}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -398,10 +475,11 @@ function CombatLog() {
   const { world } = useGameStore();
   const lines = world.eventLog.slice(-8);
   const bottomRef = React.useRef<HTMLDivElement>(null);
+  const lastLine = lines[lines.length - 1] ?? '';
 
   React.useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [lines.length]);
+  }, [lastLine]);
 
   return (
     <div className="flex flex-col h-full">
@@ -441,28 +519,54 @@ function CharacterDetail() {
   const { getDerived, getFameTitle } = require('@/store/useGameStore');
   const derived = getDerived(player);
   const hpPct = Math.round((player.hp / derived.maxHp) * 100);
+  const effectiveLines = getEffectiveStatLines(player);
+  const bonusMap = getBaseStatBonusMap(player);
   return (
     <div className="space-y-4 leading-8">
       <div className="mt-2">气血 {player.hp}/{derived.maxHp} <span style={{ color: 'var(--muted)' }}>({hpPct}%)</span></div>
 
       <div style={{ color: 'var(--accent)' }} className="mt-4 text-sm">— 基础属性 —</div>
       <div className="space-y-1 text-xs" style={{ color: 'var(--muted)' }}>
-        <div>体魄 <span style={{ color: 'var(--foreground)' }}>{player.base.physique}</span> <span className="ml-2">— 气血上限、防御</span></div>
-        <div>力量 <span style={{ color: 'var(--foreground)' }}>{player.base.strength}</span> <span className="ml-2">— 攻击伤害</span></div>
-        <div>敏捷 <span style={{ color: 'var(--foreground)' }}>{player.base.agility}</span> <span className="ml-2">— 闪避</span></div>
+        <div>体魄 <span style={{ color: 'var(--foreground)' }}>{player.base.physique - (bonusMap.physique?.value ?? 0)}</span>{bonusMap.physique && bonusMap.physique.value > 0 && <span style={{ color: 'var(--accent)' }}>+{bonusMap.physique.value}</span>} <span className="ml-2">— 气血上限、防御</span></div>
+        <div>力量 <span style={{ color: 'var(--foreground)' }}>{player.base.strength - (bonusMap.strength?.value ?? 0)}</span>{bonusMap.strength && bonusMap.strength.value > 0 && <span style={{ color: 'var(--accent)' }}>+{bonusMap.strength.value}</span>} <span className="ml-2">— 攻击伤害</span></div>
+        <div>敏捷 <span style={{ color: 'var(--foreground)' }}>{player.base.agility - (bonusMap.agility?.value ?? 0)}</span>{bonusMap.agility && bonusMap.agility.value > 0 && <span style={{ color: 'var(--accent)' }}>+{bonusMap.agility.value}</span>} <span className="ml-2">— 闪避</span></div>
         <div>智谋 <span style={{ color: 'var(--foreground)' }}>{player.base.intellect}</span> <span className="ml-2">— 事件判断</span></div>
-        <div>洞察 <span style={{ color: 'var(--foreground)' }}>{player.base.perception}</span> <span className="ml-2">— 暴击率、命中</span></div>
-        <div>意志 <span style={{ color: 'var(--foreground)' }}>{player.base.willpower}</span> <span className="ml-2">— 内力恢复</span></div>
+        <div>洞察 <span style={{ color: 'var(--foreground)' }}>{player.base.perception - (bonusMap.perception?.value ?? 0)}</span>{bonusMap.perception && bonusMap.perception.value > 0 && <span style={{ color: 'var(--accent)' }}>+{bonusMap.perception.value}</span>} <span className="ml-2">— 暴击率、命中</span></div>
+        <div>意志 <span style={{ color: 'var(--foreground)' }}>{player.base.willpower - (bonusMap.willpower?.value ?? 0)}</span>{bonusMap.willpower && bonusMap.willpower.value > 0 && <span style={{ color: 'var(--accent)' }}>+{bonusMap.willpower.value}</span>} <span className="ml-2">— 内力恢复</span></div>
       </div>
 
       <div style={{ color: 'var(--accent)' }} className="mt-4 text-sm">— 战斗属性 —</div>
       <div className="grid grid-cols-2 gap-1 text-xs" style={{ color: 'var(--muted)' }}>
-        <div>攻击 {derived.attack}</div>
-        <div>防御 {derived.defense}</div>
+        <div>
+          攻击 {derived.attack}
+          {effectiveLines[0].bonus && <span style={{ color: 'var(--accent)' }}>（{BASE_SKILL_NAMES.sword}+{effectiveLines[0].bonus.value}）</span>}
+        </div>
+        <div>
+          防御 {derived.defense}
+          {effectiveLines[1].bonus && <span style={{ color: 'var(--accent)' }}>（{BASE_SKILL_NAMES.body}+{effectiveLines[1].bonus.value}）</span>}
+        </div>
         <div>命中 {derived.accuracy}</div>
-        <div>闪避 {derived.evasion}</div>
-        <div>暴击 {derived.critRate}%</div>
+        <div>
+          闪避 {derived.evasion}
+          {effectiveLines[2].bonus && <span style={{ color: 'var(--accent)' }}>（{BASE_SKILL_NAMES.agility}+{effectiveLines[2].bonus.value}）</span>}
+        </div>
+        <div>
+          暴击 {derived.critRate}%
+          {effectiveLines[4].bonus && <span style={{ color: 'var(--accent)' }}>（{BASE_SKILL_NAMES.insight}+{effectiveLines[4].bonus.value}%）</span>}
+        </div>
         <div>金币 {player.gold}</div>
+      </div>
+
+      <div style={{ color: 'var(--accent)' }} className="mt-4 text-sm">— 基础技能生效 —</div>
+      <div className="space-y-1 text-xs" style={{ color: 'var(--muted)' }}>
+        {effectiveLines.filter((line) => line.bonus && line.bonus.value > 0).length > 0 ? effectiveLines.map((line) => (
+          line.bonus && line.bonus.value > 0 ? (
+            <div key={line.skillId}>
+              {BASE_SKILL_NAMES[line.skillId]}：
+              <span style={{ color: 'var(--accent)' }}> {BONUS_STAT_NAMES[line.bonus.stat]} +{line.bonus.value}{line.suffix}</span>
+            </div>
+          ) : null
+        )) : <div>当前尚未有突破后的额外加成生效。</div>}
       </div>
     </div>
   );
@@ -560,4 +664,3 @@ function GameOverOverlay() {
 }
 
 /* ── Promotion Overlay ── */
-

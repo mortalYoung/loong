@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useGameStore } from '@/store/useGameStore';
-import { BASE_SKILLS, getTierName, canBreakthrough, MAX_PROFICIENCY, TIER_BONUSES, formatProficiency } from '@/game/data/skillData';
+import { BASE_SKILLS, BONUS_STAT_NAMES, getTierName, canBreakthrough, MAX_PROFICIENCY, TIER_BONUSES, formatProficiency } from '@/game/data/skillData';
 
 type Props = { open?: boolean; onClose: () => void };
 
@@ -41,7 +41,16 @@ export default function SkillTreeModal({ open = true, onClose }: Props) {
                   <div className="h-full rounded-full" style={{ width: `${pct}%`, background: ready ? '#c8a55a' : '#5a7a5a', transition: 'width 0.3s' }} />
                 </div>
                 <div className="mt-1 text-[10px]" style={{ color: '#555' }}>
-                  突破加成：+{TIER_BONUSES[sk.id]?.[0]?.stat === 'strength' ? '力量' : TIER_BONUSES[sk.id]?.[0]?.stat === 'agility' ? '敏捷' : TIER_BONUSES[sk.id]?.[0]?.stat === 'physique' ? '体魄' : TIER_BONUSES[sk.id]?.[0]?.stat === 'willpower' ? '意志' : '洞察'}（{TIER_BONUSES[sk.id]?.map(b => b.value).join('/')}）
+                  突破加成：
+                  <span style={{ color: 'var(--accent)' }}> +{BONUS_STAT_NAMES[TIER_BONUSES[sk.id]?.[0]?.stat ?? 'strength']}</span>
+                  {' '}<span style={{ color: 'var(--accent)' }}>+</span>{TIER_BONUSES[sk.id]?.map((b, idx) => (
+                    <span key={idx}>
+                      {idx > 0 && <span style={{ color: '#444' }}>/</span>}
+                      <span style={{ color: idx < state.tier ? '#c8a55a' : '#444', fontWeight: idx < state.tier ? 'bold' : 'normal' }}>
+                        {b.value}
+                      </span>
+                    </span>
+                  ))}
                 </div>
                 <div className="mt-2 flex justify-between items-center">
                       <span className="text-xs" style={{ color: 'var(--muted)' }}>{sk.description}</span>

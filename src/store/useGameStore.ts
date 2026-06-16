@@ -161,6 +161,8 @@ export interface EventOption {
   successRate: number; // base % (0-100)
   dynamicRate?: 'exploration'; // if set, successRate is overridden by exploration % of current chapter
   skillBonus: { skill: string; bonus: number }[]; // learned skill → extra %
+  minHp?: number;   // if set, option is disabled when player.hp < minHp
+  minGold?: number; // if set, option is disabled when player.gold < minGold
   success: EventOutcome;
   failure: EventOutcome;
 }
@@ -174,6 +176,8 @@ export interface EventOutcome {
   enemyId?: string;    // enemy ID to start combat when effect='combat'
   skillId?: string;    // base skill ID for skill_up effect (e.g. 'swordplay')
   goldChange?: number; // additional gold change alongside main effect (e.g. -8 for buying)
+  onWin?: string;      // breakthrough event key to jump to when combat is won
+  onLose?: string;     // breakthrough event key to jump to when combat is lost (instead of GAMEOVER)
 }
 
 export interface WorldState {
@@ -202,6 +206,7 @@ interface GameStoreState {
   combat: CombatState;
   currentEvent: GameEvent | null;
   pendingAreaUnlock: ChapterId | null;
+  pendingCombatOutcome: EventOutcome | null; // outcome that triggered the current combat (for onWin/onLose routing)
 
   // Actions
   setGameState: (state: GameStatus) => void;
@@ -312,6 +317,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   combat: { ...INITIAL_COMBAT },
   currentEvent: null,
   pendingAreaUnlock: null,
+  pendingCombatOutcome: null,
 
   setGameState: (state) => set({ gameState: state }),
 
@@ -323,6 +329,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       combat: { ...INITIAL_COMBAT },
       currentEvent: null,
       pendingAreaUnlock: null,
+      pendingCombatOutcome: null,
     }),
 
   reset: () => {
@@ -616,13 +623,17 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       // Exploration gain: 0-1% per combat (boss and normal same)
       const exploGain = Math.round(normalRand(0.5, 0.2, 0, 1) * 10) / 10;
       if (exploGain > 0) get().addExploration(enemy.areaId, exploGain);
-      // Breakthrough combat: defeating the elder → phase 3 narrative (no WORLDMAP flash)
-      if (enemy.id === 'sword_elder') {
-        get().breakthroughSkill('sword');
+      // If this combat was triggered by an event outcome with onWin, route back into event chain
+      const pendingOutcome = get().pendingCombatOutcome;
+      if (pendingOutcome?.onWin) {
         const { BREAKTHROUGH_EVENTS } = require('@/game/data/breakthroughEvents');
-        set((s) => ({ combat: { ...INITIAL_COMBAT } }));
-        if (BREAKTHROUGH_EVENTS['sword_3']) {
-          setTimeout(() => set({ currentEvent: BREAKTHROUGH_EVENTS['sword_3'], gameState: 'EVENT' }), 600);
+        const nextEvent = BREAKTHROUGH_EVENTS[pendingOutcome.onWin];
+        // Restore player to full HP before entering the narrative phase after a win
+        const { player: pw } = get();
+        const maxHpWin = getDerived(pw).maxHp;
+        set({ combat: { ...INITIAL_COMBAT }, pendingCombatOutcome: null, player: { ...pw, hp: maxHpWin } });
+        if (nextEvent) {
+          setTimeout(() => set({ currentEvent: nextEvent, gameState: 'EVENT' }), 600);
           return;
         }
       }
@@ -661,9 +672,28 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
 
     } else {
+      // If the triggering outcome has onLose, route into that event instead of GAMEOVER
+      const pendingOutcome = get().pendingCombatOutcome;
+      if (pendingOutcome?.onLose) {
+        const { BREAKTHROUGH_EVENTS } = require('@/game/data/breakthroughEvents');
+        const nextEvent = BREAKTHROUGH_EVENTS[pendingOutcome.onLose];
+        // Restore player to full HP before entering the narrative phase after a loss
+        const { player: p } = get();
+        const maxHp = getDerived(p).maxHp;
+        set({
+          combat: { ...INITIAL_COMBAT },
+          pendingCombatOutcome: null,
+          player: { ...p, hp: maxHp },
+        });
+        if (nextEvent) {
+          setTimeout(() => set({ currentEvent: nextEvent, gameState: 'EVENT' }), 600);
+          return;
+        }
+      }
       set({
         gameState: 'GAMEOVER',
         combat: { ...INITIAL_COMBAT },
+        pendingCombatOutcome: null,
       });
     }
     void world;
@@ -782,7 +812,11 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     // Apply effect
     let newPlayer = { ...player };
     let newGold = player.gold;
-    let logEntry = `${succeeded ? '「得」' : '「失」'} ${outcome.text}`;
+    // Only log if outcome has meaningful text; breakthrough events often have empty text
+    const outcomeText = outcome.text?.trim();
+    let logEntry = outcomeText
+      ? `${succeeded ? '「得」' : '「失」'} ${outcomeText}`
+      : '';
 
     if (outcome.effect === 'heal') {
       newPlayer.hp = Math.min(getDerived(newPlayer).maxHp, newPlayer.hp + (outcome.value ?? 20));
@@ -807,11 +841,12 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         setTimeout(() => get().discoverChapter(chId), 300);
       }
     } else if (outcome.effect === 'combat' && outcome.enemyId) {
-      // Trigger a combat from event
+      // Trigger a combat from event; store outcome for onWin/onLose routing after combat
       const { ALL_ENEMIES } = require('@/game/data/gameData');
       const enemy = ALL_ENEMIES.find((e: CombatEnemy) => e.id === outcome.enemyId);
       if (enemy) {
-        setTimeout(() => get().startCombat(enemy), 500);
+        set({ pendingCombatOutcome: outcome });
+        setTimeout(() => get().startCombat(enemy), 0);
       }
     } else if (outcome.effect === 'stat_up') {
       // Random base stat +1
@@ -868,19 +903,20 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       ? [...world.completedEventIds, currentEvent.id]
       : world.completedEventIds;
 
+    const pendingCombat = !lost && outcome.effect === 'combat' && !!outcome.enemyId;
     set((s) => ({
       player: { ...newPlayer, gold: newGold },
       world: {
         ...s.world,
         completedEventIds: updatedCompletedEvents,
-        eventLog: [...s.world.eventLog, logEntry].slice(-30),
+        eventLog: (logEntry ? [...s.world.eventLog, logEntry] : s.world.eventLog).slice(-30),
       },
       currentEvent: null,
-      gameState: lost ? 'GAMEOVER' : 'WORLDMAP',
+      gameState: lost ? 'GAMEOVER' : pendingCombat ? 'COMBAT' : 'WORLDMAP',
     }));
 
     // Breakthrough event chaining: skip log, skip WORLDMAP flash, go directly to next phase
-    if (currentEvent.id.startsWith('bt_') && option.id !== 'leave' && option.id !== 'continue') {
+    if (currentEvent.id.startsWith('bt_') && option.id !== 'leave') {
       const { BREAKTHROUGH_EVENTS, BT_CHAIN_MAP } = require('@/game/data/breakthroughEvents');
       const key = `${currentEvent.id}:${option.id}`;
       const nextPhaseKey = BT_CHAIN_MAP[key];
@@ -890,8 +926,8 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       }
     }
 
-    // Events also grant exploration progress (0-1%)
-    if (!lost && currentEvent.areaId) {
+    // Events also grant exploration progress (0-1%); breakthrough events are excluded
+    if (!lost && currentEvent.areaId && !currentEvent.id.startsWith('bt_')) {
       const exploGain = Math.round(normalRand(0.5, 0.2, 0, 1) * 10) / 10;
       if (exploGain > 0) get().addExploration(currentEvent.areaId, exploGain);
     }
@@ -953,7 +989,16 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   startBreakthroughEvent: (skill) => {
     // Trigger the breakthrough event for a skill (does not consume stamina)
     const { BREAKTHROUGH_EVENTS } = require('@/game/data/breakthroughEvents');
-    const event = BREAKTHROUGH_EVENTS[skill];
+    const currentTier = get().player.skills[skill]?.tier ?? 0;
+    const skillEventMap: Record<BaseSkillId, string[]> = {
+      sword: ['sword', 'sword_mastery', 'sword_grandmaster', 'sword_mythic'],
+      agility: ['agility', 'agility_mastery', 'agility_grandmaster', 'agility_mythic'],
+      body: ['body', 'body_mastery', 'body_grandmaster', 'body_mythic'],
+      mind: ['mind', 'mind_mastery', 'mind_grandmaster', 'mind_mythic'],
+      insight: ['insight', 'insight_mastery', 'insight_grandmaster', 'insight_mythic'],
+    };
+    const eventKey = skillEventMap[skill][currentTier] ?? skillEventMap[skill][0];
+    const event = BREAKTHROUGH_EVENTS[eventKey];
     if (!event) return;
     set({ currentEvent: event, gameState: 'EVENT' });
   },
