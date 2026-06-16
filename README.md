@@ -21,6 +21,8 @@ _龙隐山河_
 
 </div>
 
+![screenshot](public/screenshot.png)
+
 一个基于 Next.js、React 与 Zustand 构建的在线 Idle Text RPG。
 
 ## 项目概览
